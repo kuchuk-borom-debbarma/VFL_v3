@@ -20,7 +20,6 @@ export abstract class BaseBlock {
         parentBlockId?: string;
         scopeBlockId: string;
         data: Record<string, any>;
-        wasCalledAt?: number;
         ranAt: number;
         finishedAt: number;
         enteredAt?: number;
@@ -37,6 +36,5 @@ export abstract class BaseBlock {
         this.ranAt = initData.ranAt;
         this.finishedAt = initData.finishedAt;
         this.exitedAt = initData.exitedAt;
-        this.wasCalledAt = initData.wasCalledAt;
     }
 }
