@@ -1,53 +1,96 @@
 import { VFLClient } from "../src/client/VFLClient.ts";
-import { JsonFlush } from "../src/core/flushes/JsonFlush.ts";
-import { StructuredJsonFlush } from "../src/core/flushes/StructuredJsonFlush.ts";
+import type { VFLContext } from "../src/core/Context.ts";
 import { MermaidFlush } from "../src/core/flushes/MermaidFlush.ts";
 
 /**
- * Realistic flow testing the Flush and Batching mechanisms.
+ * The instrumented version of the realistic checkout process.
+ * Demonstrates how context-passing preserves the relationship across functions
+ * and parallel branches.
  */
 
-// Initialize client with multiple flushes and a batch size of 4
 const vfl = new VFLClient({
-  defaultScope: "order-service",
-  batchSize: 4,
-  flushes: [
-    new JsonFlush(),
-    new StructuredJsonFlush(),
-    new MermaidFlush()
-  ]
+  defaultScope: "api-gateway",
+  flushes: [new MermaidFlush()]
 });
 
-async function processOrder(orderId: string) {
-  console.log(`\n>>> Processing Order: ${orderId} <<<\n`);
+async function validateUser(ctx: VFLContext, userId: string) {
+  // Use 'withScope' style logic manually by switching scope in the call
+  let authCtx = vfl.log({ ...ctx, scope: "auth-service" }, `Validating session for user: ${userId}`);
+  await sleep(30);
+  return vfl.log(authCtx, "Session valid");
+}
+
+async function checkInventory(ctx: VFLContext, items: string[]) {
+  let invCtx = vfl.log({ ...ctx, scope: "inventory-service" }, `Checking stock for items: ${items.join(", ")}`);
   
-  let ctx = vfl.startTrace(`Order Flow: ${orderId}`);
-
-  // 1. Log (Block 1)
-  ctx = vfl.log(ctx, "Starting validation");
-  await sleep(10);
-
-  // 2. HTTP (Block 2)
-  ctx = vfl.http(ctx, { url: "https://auth.local", method: "POST", statusCode: 200 });
-  await sleep(10);
-
-  // 3. DB (Block 3)
-  ctx = vfl.db(ctx, { system: "redis", query: "GET user:123" });
-  await sleep(10);
-
-  // 4. GraphQL (Block 4) -> This should trigger the first AUTO-FLUSH (batchSize: 4)
-  console.log("\n[TEST] Adding 4th block, expecting AUTO-FLUSH...");
-  ctx = vfl.graphql(ctx, { 
-    url: "https://api.local/graphql", 
-    query: "query { stock }", 
+  // Simulated remote HTTP call
+  invCtx = vfl.http(invCtx, { 
+    url: "https://inventory.local/v1/stock", 
+    method: "GET", 
     statusCode: 200 
   });
+  
+  await sleep(150);
+  return vfl.log(invCtx, "Stock availability confirmed");
+}
 
-  // 5. Message (Block 5) -> Part of the next batch
-  ctx = vfl.message(ctx, { system: "kafka", topic: "orders", action: "publish" });
+async function processPayment(ctx: VFLContext, amount: number) {
+  let payCtx = vfl.log({ ...ctx, scope: "payment-service" }, `Initiating payment for $${amount}`);
+  
+  // Simulated remote DB call
+  payCtx = vfl.db(payCtx, { 
+    system: "stripe-gateway", 
+    query: "POST /v1/charges", 
+    rowsAffected: 1 
+  });
+  
+  await sleep(200);
+  return vfl.log(payCtx, "Payment processed successfully");
+}
 
-  // Manually flush the remaining blocks at the end of the flow
-  console.log("\n[TEST] Flow finished, triggering MANUAL FLUSH for remaining blocks...");
+async function trackEvent(ctx: VFLContext, event: string) {
+  let anaCtx = vfl.log({ ...ctx, scope: "analytics-service" }, `Tracking event: ${event}`);
+  
+  // Simulated remote Message call
+  anaCtx = vfl.message(anaCtx, { 
+    system: "segment", 
+    topic: "events", 
+    action: "publish" 
+  });
+  
+  await sleep(10);
+  return anaCtx;
+}
+
+async function checkoutProcess(orderId: string) {
+  console.log(`\n>>> [VFL] Starting Instrumented Checkout: ${orderId} <<<\n`);
+
+  // Start Trace
+  let ctx = vfl.startTrace("Checkout Flow", { orderId });
+  ctx = vfl.log(ctx, `Received checkout request for ${orderId}`);
+
+  // 1. Auth Call
+  ctx = await validateUser(ctx, "user_123");
+
+  // 2. Parallel Tasks
+  // Both tasks inherit the same parent 'ctx'
+  console.log(`[VFL] Dispatching parallel tasks...`);
+  const [invCtxFinal, payCtxFinal] = await Promise.all([
+    checkInventory(ctx, ["item_A", "item_B"]),
+    processPayment(ctx, 150.00)
+  ]);
+
+  // 3. Final steps - we continue from the payment completion, but could link both
+  ctx = vfl.log(payCtxFinal, `Finalizing order ${orderId}`);
+  
+  // Manual link to show that inventory also had to finish
+  vfl.link(invCtxFinal, ctx, "sequential", { note: "inventory-ready" });
+
+  await trackEvent(ctx, "order_completed");
+
+  console.log(`\n>>> [VFL] Instrumented Flow Finished. <<<\n`);
+  
+  // Ensure data is flushed to the Mermaid output
   await vfl.flush();
 }
 
@@ -55,4 +98,4 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-processOrder("ORD-BATCH-789");
+checkoutProcess("ORD-VFL-202");

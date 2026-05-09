@@ -1,52 +1,55 @@
 /**
- * A realistic order processing flow using only standard logging.
- * This represents the "Before" state - hard to visualize relationships and latencies.
+ * A realistic simulation of a checkout process using only standard console logging.
+ * This baseline demonstrates how hard it is to track flows across function boundaries
+ * and parallel executions without structured tracing.
  */
 
-async function processOrder(orderId: string) {
-  console.log(`[OrderService] Starting process for order: ${orderId}`);
+async function validateUser(userId: string) {
+  console.log(`[AuthService] Validating session for user: ${userId}`);
+  await sleep(30);
+  console.log(`[AuthService] Session valid.`);
+}
 
-  // 1. Validation
-  console.log(`[OrderService] Validating order ${orderId}...`);
-  await sleep(20);
-  console.log(`[OrderService] Order ${orderId} is valid.`);
+async function checkInventory(items: string[]) {
+  console.log(`[InventoryService] Checking stock for items: ${items.join(", ")}`);
+  await sleep(150); // Faked remote API latency
+  console.log(`[InventoryService] Stock availability confirmed.`);
+}
 
-  // 2. Fetch User (GraphQL)
-  console.log(`[UserService] Fetching user profile for order ${orderId}...`);
-  await sleep(50);
-  console.log(`[UserService] User profile retrieved.`);
+async function processPayment(amount: number) {
+  console.log(`[PaymentService] Initiating payment for $${amount}`);
+  await sleep(200); // Faked remote DB/Gateway latency
+  console.log(`[PaymentService] Payment processed successfully.`);
+}
 
-  // 3. Parallel Tasks
-  console.log(`[OrderService] Running parallel tasks for ${orderId}...`);
-  
-  const stockPromise = (async () => {
-    console.log(`[InventoryService] Checking stock for order ${orderId}...`);
-    await sleep(100);
-    console.log(`[InventoryService] Stock confirmed.`);
-  })();
-
-  const dbPromise = (async () => {
-    console.log(`[OrderService] Logging transaction to DB for ${orderId}...`);
-    await sleep(40);
-    console.log(`[OrderService] DB Write successful.`);
-  })();
-
-  await Promise.all([stockPromise, dbPromise]);
-
-  // 4. Confirmation
-  console.log(`[OrderService] Confirming order ${orderId}...`);
+async function trackEvent(event: string) {
+  console.log(`[AnalyticsService] Tracking event: ${event}`);
   await sleep(10);
+}
 
-  // 5. Messaging
-  console.log(`[LogisticsService] Publishing order.confirmed event for ${orderId}...`);
-  await sleep(5);
-  
-  console.log(`[OrderService] Order ${orderId} processed successfully.`);
+async function checkoutProcess(orderId: string) {
+  console.log(`\n>>> [Gateway] Received checkout request for ${orderId} <<<\n`);
+
+  // 1. Synchronous dependency
+  await validateUser("user_123");
+
+  // 2. Parallel dependencies
+  console.log(`[Gateway] Dispatching inventory and payment tasks in parallel...`);
+  await Promise.all([
+    checkInventory(["item_A", "item_B"]),
+    processPayment(150.00)
+  ]);
+
+  // 3. Final steps
+  console.log(`[Gateway] Finalizing order ${orderId}...`);
+  await trackEvent("order_completed");
+
+  console.log(`\n>>> [Gateway] Checkout ${orderId} finished successfully <<<\n`);
 }
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Execute the flow
-processOrder("ORD-999").then(() => console.log("Flow finished."));
+// Start the process
+checkoutProcess("ORD-REAL-101");
