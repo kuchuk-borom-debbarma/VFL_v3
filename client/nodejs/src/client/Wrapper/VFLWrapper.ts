@@ -2,17 +2,20 @@ import type { VFLBaseBuffer } from "../../core/VFLBufferBase";
 import type { VFLContext } from "../../core/VFLContext";
 import type { VFLFlusherBase } from "../../core/VFLFlusherBase";
 import { Trace } from "../../models/Trace"
+import { VFLCtxFlow } from "../VFLCtxFlow";
+import { VFLCtxWrapper } from "./VFLCtxWrapper";
 
 
 export class VFLWrapper<T> {
     constructor(
         private readonly buffer: VFLBaseBuffer<unknown>,
-        private readonly flusher: VFLFlusherBase<unknown>
+        private readonly flusher: VFLFlusherBase<unknown>,
+        private readonly ctxFlowBuilder: (ctx: VFLContext) => VFLCtxFlow
     ) { }
 
-    startTrace<T>(traceName: string, fn: (vflContext: VFLContext) => Promise<T>): Promise<T>
-    startTrace<T>(traceName: string, fn: (vflContext: VFLContext) => T): T
-    startTrace<T>(traceName: string, fn: (vflContext: VFLContext) => Promise<T> | T): Promise<T> | T {
+    startTrace<T>(traceName: string, fn: (vflContext: VFLCtxFlow) => Promise<T>): Promise<T>
+    startTrace<T>(traceName: string, fn: (vflContext: VFLCtxFlow) => T): T
+    startTrace<T>(traceName: string, fn: (vflContext: VFLCtxFlow) => Promise<T> | T): Promise<T> | T {
         const trace = new Trace(traceName)
         this.buffer.push(trace)
 
@@ -23,7 +26,7 @@ export class VFLWrapper<T> {
         let result: Promise<T> | T
 
         try {
-            result = fn(context)
+            result = fn(new VFLCtxWrapper(context))
         } catch (e) {
             this.buffer.push({ traceId: trace.id, type: 'EOF', status: 'failure' })
             this.flusher.flush(this.buffer.drain())
