@@ -3,9 +3,7 @@ import type { VFLContext } from "../src/core/Context.ts";
 import { MermaidFlush } from "../src/core/flushes/MermaidFlush.ts";
 
 /**
- * The instrumented version of the realistic checkout process.
- * Demonstrates how context-passing preserves the relationship across functions
- * and parallel branches.
+ * Demonstrates Hierarchical Scopes and Nested Subgraphs.
  */
 
 const vfl = new VFLClient({
@@ -13,84 +11,61 @@ const vfl = new VFLClient({
   flushes: [new MermaidFlush()]
 });
 
-async function validateUser(ctx: VFLContext, userId: string) {
-  // Use 'withScope' style logic manually by switching scope in the call
-  let authCtx = vfl.log({ ...ctx, scope: "auth-service" }, `Validating session for user: ${userId}`);
-  await sleep(30);
-  return vfl.log(authCtx, "Session valid");
-}
+async function runNestedFlow() {
+  console.log("\n>>> Starting Hierarchical Scope Flow <<<\n");
 
-async function checkInventory(ctx: VFLContext, items: string[]) {
-  let invCtx = vfl.log({ ...ctx, scope: "inventory-service" }, `Checking stock for items: ${items.join(", ")}`);
-  
-  // Simulated remote HTTP call
-  invCtx = vfl.http(invCtx, { 
-    url: "https://inventory.local/v1/stock", 
-    method: "GET", 
-    statusCode: 200 
-  });
-  
-  await sleep(150);
-  return vfl.log(invCtx, "Stock availability confirmed");
-}
+  let ctx = vfl.startTrace("Deep Fulfillment Flow");
+  ctx = vfl.log(ctx, "Checkout started");
 
-async function processPayment(ctx: VFLContext, amount: number) {
-  let payCtx = vfl.log({ ...ctx, scope: "payment-service" }, `Initiating payment for $${amount}`);
-  
-  // Simulated remote DB call
-  payCtx = vfl.db(payCtx, { 
-    system: "stripe-gateway", 
-    query: "POST /v1/charges", 
-    rowsAffected: 1 
-  });
-  
-  await sleep(200);
-  return vfl.log(payCtx, "Payment processed successfully");
-}
+  // --- Auth Service (with sub-modules) ---
+  ctx = await (async (parentCtx) => {
+    // Enter 'auth-service'
+    let authCtx = vfl.subScope(parentCtx, "auth-service");
+    authCtx = vfl.log(authCtx, "Validating session");
 
-async function trackEvent(ctx: VFLContext, event: string) {
-  let anaCtx = vfl.log({ ...ctx, scope: "analytics-service" }, `Tracking event: ${event}`);
-  
-  // Simulated remote Message call
-  anaCtx = vfl.message(anaCtx, { 
-    system: "segment", 
-    topic: "events", 
-    action: "publish" 
-  });
-  
-  await sleep(10);
-  return anaCtx;
-}
+    // Enter 'permissions' module inside 'auth-service'
+    let permCtx = vfl.subScope(authCtx, "permissions-module");
+    permCtx = vfl.log(permCtx, "Checking granular access");
+    await sleep(20);
+    permCtx = vfl.log(permCtx, "Access granted");
 
-async function checkoutProcess(orderId: string) {
-  console.log(`\n>>> [VFL] Starting Instrumented Checkout: ${orderId} <<<\n`);
+    // Return to 'auth-service' level
+    authCtx = vfl.log(permCtx, "Session fully verified");
+    return authCtx;
+  })(ctx);
 
-  // Start Trace
-  let ctx = vfl.startTrace("Checkout Flow", { orderId });
-  ctx = vfl.log(ctx, `Received checkout request for ${orderId}`);
+  // --- Inventory & Shipping (Parallel) ---
+  const [invFinal, shipFinal] = await Promise.all([
+    // Inventory Service
+    (async (parentCtx) => {
+      let invCtx = vfl.subScope(parentCtx, "inventory-service");
+      invCtx = vfl.log(invCtx, "Reserving stock");
+      
+      // Nested DB call
+      let dbCtx = vfl.subScope(invCtx, "database-layer");
+      dbCtx = vfl.db(dbCtx, { system: "postgres", query: "UPDATE stock..." });
+      
+      return vfl.log(dbCtx, "Stock reserved");
+    })(ctx),
 
-  // 1. Auth Call
-  ctx = await validateUser(ctx, "user_123");
-
-  // 2. Parallel Tasks
-  // Both tasks inherit the same parent 'ctx'
-  console.log(`[VFL] Dispatching parallel tasks...`);
-  const [invCtxFinal, payCtxFinal] = await Promise.all([
-    checkInventory(ctx, ["item_A", "item_B"]),
-    processPayment(ctx, 150.00)
+    // Shipping Service
+    (async (parentCtx) => {
+      let shipCtx = vfl.subScope(parentCtx, "shipping-service");
+      shipCtx = vfl.log(shipCtx, "Fetching rates");
+      
+      // Nested Legacy API
+      let legacyCtx = vfl.subScope(shipCtx, "legacy-adapter");
+      legacyCtx = vfl.http(legacyCtx, { url: "https://legacy.soap", method: "POST", statusCode: 200 });
+      
+      return vfl.log(legacyCtx, "Rates fetched");
+    })(ctx)
   ]);
 
-  // 3. Final steps - we continue from the payment completion, but could link both
-  ctx = vfl.log(payCtxFinal, `Finalizing order ${orderId}`);
-  
-  // Manual link to show that inventory also had to finish
-  vfl.link(invCtxFinal, ctx, "sequential", { note: "inventory-ready" });
+  // Final merge
+  ctx = vfl.log(shipFinal, "All systems integrated");
+  vfl.link(invFinal, ctx, "sequential");
 
-  await trackEvent(ctx, "order_completed");
-
-  console.log(`\n>>> [VFL] Instrumented Flow Finished. <<<\n`);
-  
-  // Ensure data is flushed to the Mermaid output
+  console.log("\n>>> Deep Flow Finished. <<<\n");
   await vfl.flush();
 }
 
@@ -98,4 +73,4 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-checkoutProcess("ORD-VFL-202");
+runNestedFlow();
