@@ -1,11 +1,11 @@
 export class Trace {
-    readonly name: string;
-    readonly id: string;
-    readonly createdAt: string;
+    readonly name: string
+    readonly id: string
+    readonly createdAt: number
 
-    constructor(name: string, id: string, createdAt: string) {
-        this.name = name;
-        this.id = id;
-        this.createdAt = createdAt;
+    constructor(name: string) {
+        this.name = name
+        this.id = crypto.randomUUID()
+        this.createdAt = Date.now()
     }
 }
