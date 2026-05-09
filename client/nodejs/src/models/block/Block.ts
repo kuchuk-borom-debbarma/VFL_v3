@@ -11,6 +11,12 @@ export interface BlockParams<TMetadata = Record<string, any>> {
   /** Strongly typed metadata for the block, defined by its type. */
   metadata: TMetadata;
   /** 
+   * Timestamp (ms) when the operation was first initiated at the absolute origin
+   * (e.g., the moment a user clicked a button in a browser).
+   * Useful for tracking total end-to-end user-perceived latency.
+   */
+  originAt?: number | null;
+  /** 
    * Timestamp (ms) when the block's operation was first received by the system.
    * Useful for tracking ingress latency.
    */
@@ -29,6 +35,11 @@ export interface BlockParams<TMetadata = Record<string, any>> {
    * Useful for tracking egress latency.
    */
   leftAt?: number | null;
+  /** 
+   * Timestamp (ms) when this block's data was sent to the VFL server.
+   * Useful for tracking telemetry lag in case of batching or pooling.
+   */
+  sentAt?: number | null;
 }
 
 /**
@@ -47,6 +58,8 @@ export abstract class Block<TMetadata = Record<string, any>> {
   /** Strongly-typed metadata for the block. */
   metadata: TMetadata;
 
+  /** Time the operation was initiated by the user or origin. */
+  originAt: number | null;
   /** Time the request was received at the system boundary. */
   receivedAt: number | null;
   /** Time the processing of the block started. */
@@ -55,16 +68,20 @@ export abstract class Block<TMetadata = Record<string, any>> {
   endedAt: number | null;
   /** Time the response left the system boundary. */
   leftAt: number | null;
+  /** Time the block telemetry was sent to the VFL server. */
+  sentAt: number | null;
 
   constructor(params: BlockParams<TMetadata>) {
     this.id = params.id;
     this.traceId = params.traceId;
     this.scope = params.scope;
     this.metadata = params.metadata;
+    this.originAt = params.originAt ?? null;
     this.receivedAt = params.receivedAt ?? null;
     this.startedAt = params.startedAt ?? Date.now();
     this.endedAt = params.endedAt ?? null;
     this.leftAt = params.leftAt ?? null;
+    this.sentAt = params.sentAt ?? null;
   }
 
   /**
@@ -77,10 +94,12 @@ export abstract class Block<TMetadata = Record<string, any>> {
       scope: this.scope,
       blockType: this.blockType,
       metadata: this.metadata,
+      originAt: this.originAt,
       receivedAt: this.receivedAt,
       startedAt: this.startedAt,
       endedAt: this.endedAt,
       leftAt: this.leftAt,
+      sentAt: this.sentAt,
     };
   }
 }
