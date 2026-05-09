@@ -12,6 +12,7 @@ export abstract class BaseBlock {
     readonly ranAt: number; //When this started executing
     readonly finishedAt: number; //When this finished executing
     readonly exitedAt?: number; //When it returned to parent
+    readonly logicalClock: number; //The logical time of this block relative to its parent to deal with clock skew issue
 
     constructor(initData: {
         traceId: string;
@@ -24,6 +25,7 @@ export abstract class BaseBlock {
         finishedAt: number;
         enteredAt?: number;
         exitedAt?: number;
+        logicalClock: number;
 
     }) {
         this.traceId = initData.traceId;
@@ -36,5 +38,6 @@ export abstract class BaseBlock {
         this.ranAt = initData.ranAt;
         this.finishedAt = initData.finishedAt;
         this.exitedAt = initData.exitedAt;
+        this.logicalClock = initData.logicalClock;
     }
 }
