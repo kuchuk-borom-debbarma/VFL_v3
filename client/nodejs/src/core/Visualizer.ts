@@ -28,11 +28,13 @@ export class VFLVisualizer {
       blocks.map(b => [b.id, typeof b.toJSON === 'function' ? b.toJSON() : b])
     );
     
-    // 1. Identify root blocks (those that are never a 'toBlockId')
+    // 1. Identify root blocks
+    // Roots are blocks that do not have any incoming edges pointing to them.
     const targetBlockIds = new Set(edges.map(e => e.toBlockId));
     const rootBlocks = blocks.filter(b => !targetBlockIds.has(b.id));
 
     // 2. Build the hierarchy recursively
+    // This function explores all outbound edges for a given block and builds its child nodes.
     const buildNode = (blockId: string): StructuredNode => {
       const block = blockMap.get(blockId);
       const outboundEdges = edges.filter(e => e.fromBlockId === blockId);

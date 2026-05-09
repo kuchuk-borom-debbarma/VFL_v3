@@ -37,7 +37,8 @@ export class VFLEngine {
   }
 
   /**
-   * Returns a snapshot of the current state.
+   * Returns a snapshot of the current state including all traces, serialized blocks, and edges.
+   * This is the primary data format used by flushes.
    */
   getState() {
     return {
@@ -48,7 +49,8 @@ export class VFLEngine {
   }
 
   /**
-   * Clears the internal state.
+   * Clears the internal state. 
+   * This is typically called by the VFLClient after a successful flush to prevent data duplication.
    */
   clear(): void {
     this.traces.clear();
